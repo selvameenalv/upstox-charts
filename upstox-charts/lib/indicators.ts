@@ -128,7 +128,9 @@ export function rsi(close: number[], period = 14): number[] {
 }
 
 // ── ADX ──────────────────────────────────────────────────────────────
-export function adx(high: number[], low: number[], close: number[], period = 14) {
+// diPeriod = DI smoothing (13), adxPeriod = ADX smoothing (8)
+export function adx(high: number[], low: number[], close: number[], diPeriod = 13, adxPeriod = 8) {
+  const period = diPeriod;
   const n = high.length;
   const plusDI: number[] = new Array(n).fill(NaN);
   const minusDI: number[] = new Array(n).fill(NaN);
@@ -169,12 +171,17 @@ export function adx(high: number[], low: number[], close: number[], period = 14)
     dxArr[i] = 100 * Math.abs(plusDI[i] - minusDI[i]) / (plusDI[i] + minusDI[i] || 1e-10);
   }
 
-  // Smooth DX into ADX
-  let adxVal = dxArr.slice(period, 2 * period).filter(v => !isNaN(v)).reduce((a, b) => a + b, 0) / period;
-  adxArr[2 * period - 1] = adxVal;
-  for (let i = 2 * period; i < n; i++) {
-    adxVal = (adxVal * (period - 1) + dxArr[i]) / period;
-    adxArr[i] = adxVal;
+  // Smooth DX into ADX using adxPeriod
+  const firstDxIdx = dxArr.findIndex(v => !isNaN(v));
+  if (firstDxIdx === -1 || firstDxIdx + adxPeriod > n) return { adx: adxArr, plusDI, minusDI };
+
+  let adxVal = dxArr.slice(firstDxIdx, firstDxIdx + adxPeriod).reduce((a, b) => a + b, 0) / adxPeriod;
+  adxArr[firstDxIdx + adxPeriod - 1] = adxVal;
+  for (let i = firstDxIdx + adxPeriod; i < n; i++) {
+    if (!isNaN(dxArr[i])) {
+      adxVal = (adxVal * (adxPeriod - 1) + dxArr[i]) / adxPeriod;
+      adxArr[i] = adxVal;
+    }
   }
 
   return { adx: adxArr, plusDI, minusDI };
