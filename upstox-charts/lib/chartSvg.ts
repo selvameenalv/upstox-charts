@@ -3,11 +3,11 @@
 
 import { OHLCV, ema, bollingerBands, keltnerChannels, squeezeMomentum, rsi, adx } from './indicators';
 
-const W = 1200;
-const PAD_L = 60;
-const PAD_R = 20;
+const W = 1280;
+const PAD_L = 72;   // left: date area + left price axis
+const PAD_R = 72;   // right: right price axis
 const PAD_TOP = 50;
-const PAD_BOT = 40;
+const PAD_BOT = 52; // extra room for date labels
 const CHART_W = W - PAD_L - PAD_R;
 
 // Panel heights
@@ -65,13 +65,13 @@ export function renderChartSvg(data: OHLCV[], symbol: string, stockName: string)
   const low = data.map(d => d.low);
   const open = data.map(d => d.open);
 
-  // Indicators
+  // Indicators — ADX(13,8)
   const ema20 = ema(close, 20);
   const bb = bollingerBands(close);
   const kc = keltnerChannels(close, high, low);
   const sq = squeezeMomentum(close, high, low);
   const rsiVals = rsi(close);
-  const adxVals = adx(high, low, close);
+  const adxVals = adx(high, low, close, 13, 8);
 
   // ── Price panel scale ──
   const allPriceVals = [...close, ...bb.upper, ...bb.lower].filter(v => !isNaN(v));
@@ -126,16 +126,21 @@ export function renderChartSvg(data: OHLCV[], symbol: string, stockName: string)
   // EMA20
   const emaLine = polyline(ema20.map((v, i) => [xs[i], scaleY(v, priceMin, priceMax, Y_PRICE, H_PRICE)]), ORANGE, 1.5);
 
-  // Price grid lines (5 horizontal)
-  const priceGridLines = [0.2, 0.4, 0.6, 0.8].map(frac =>
+  // Price grid lines + labels — 8 horizontal levels
+  const priceLevels = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1];
+  const priceGridLines = priceLevels.slice(1, -1).map(frac =>
     `<line x1="${PAD_L}" y1="${(Y_PRICE + H_PRICE * (1 - frac)).toFixed(1)}" x2="${PAD_L + CHART_W}" y2="${(Y_PRICE + H_PRICE * (1 - frac)).toFixed(1)}" stroke="${GRID}" stroke-width="0.5" stroke-dasharray="3,3"/>`
   ).join('');
 
-  // Price Y labels
-  const priceYLabels = [0, 0.25, 0.5, 0.75, 1].map(frac => {
+  // Left + right price axis labels
+  const priceYLabels = priceLevels.map(frac => {
     const val = priceMin + (priceMax - priceMin) * frac;
     const y = Y_PRICE + H_PRICE * (1 - frac);
-    return `<text x="${(PAD_L - 6).toFixed(1)}" y="${y.toFixed(1)}" fill="${TEXT}" font-size="9" text-anchor="end" dominant-baseline="middle">${val.toFixed(0)}</text>`;
+    const fmt = val >= 10000 ? val.toFixed(0) : val >= 1000 ? val.toFixed(1) : val.toFixed(2);
+    return [
+      `<text x="${(PAD_L - 6).toFixed(1)}" y="${y.toFixed(1)}" fill="${TEXT_BRIGHT}" font-size="9.5" text-anchor="end" dominant-baseline="middle">${fmt}</text>`,
+      `<text x="${(PAD_L + CHART_W + 6).toFixed(1)}" y="${y.toFixed(1)}" fill="${TEXT_BRIGHT}" font-size="9.5" text-anchor="start" dominant-baseline="middle">${fmt}</text>`,
+    ].join('');
   }).join('');
 
   // ─── SQUEEZE PANEL ─────────────────────────────────────────────────
@@ -210,22 +215,44 @@ export function renderChartSvg(data: OHLCV[], symbol: string, stockName: string)
   const adx25Label = `<text x="${(PAD_L - 5).toFixed(1)}" y="${adx25Y.toFixed(1)}" fill="${YELLOW}" font-size="8" text-anchor="end" dominant-baseline="middle">25</text>`;
 
   // ─── X-AXIS DATE LABELS ────────────────────────────────────────────
-  const step = Math.max(1, Math.floor(n / 10));
+  // Show ~15 date labels evenly spaced with tick marks
+  const step = Math.max(1, Math.floor(n / 15));
   const dateLabels = data.map((d, i) => {
-    if (i % step !== 0) return '';
+    if (i % step !== 0 && i !== n - 1) return '';
     const dt = new Date(d.date);
-    const label = `${dt.getDate()} ${dt.toLocaleString('default', { month: 'short' })}`;
-    return `<text x="${xs[i].toFixed(1)}" y="${(TOTAL_H - 12).toFixed(1)}" fill="${TEXT}" font-size="8.5" text-anchor="middle" transform="rotate(-30,${xs[i].toFixed(1)},${(TOTAL_H - 12).toFixed(1)})">${label}</text>`;
+    const day = String(dt.getDate()).padStart(2, '0');
+    const mon = dt.toLocaleString('default', { month: 'short' }).toUpperCase();
+    const label = `${day} ${mon}`;
+    const x = xs[i];
+    const tickY = TOTAL_H - PAD_BOT + 2;
+    return [
+      // tick mark
+      `<line x1="${x.toFixed(1)}" y1="${tickY.toFixed(1)}" x2="${x.toFixed(1)}" y2="${(tickY + 5).toFixed(1)}" stroke="${TEXT}" stroke-width="0.8"/>`,
+      // rotated date label
+      `<text x="${x.toFixed(1)}" y="${(tickY + 8).toFixed(1)}" fill="${TEXT_BRIGHT}" font-size="10" font-weight="500" text-anchor="end" transform="rotate(-45,${x.toFixed(1)},${(tickY + 8).toFixed(1)})">${label}</text>`,
+    ].join('');
   }).join('');
+
+  // X axis baseline
+  const xAxisLine = `<line x1="${PAD_L}" y1="${(TOTAL_H - PAD_BOT + 2).toFixed(1)}" x2="${(PAD_L + CHART_W).toFixed(1)}" y2="${(TOTAL_H - PAD_BOT + 2).toFixed(1)}" stroke="${GRID}" stroke-width="0.8"/>`;
 
   // ─── PANEL LABELS ──────────────────────────────────────────────────
   const panelLabels = [
-    `<text x="${(PAD_L + 4)}" y="${(Y_SQ + 12)}" fill="${TEXT}" font-size="9" font-weight="600">BB/KC SQUEEZE</text>`,
-    `<text x="${(PAD_L + 4)}" y="${(Y_RSI + 12)}" fill="${PURPLE}" font-size="9" font-weight="600">RSI (14)</text>`,
-    `<text x="${(PAD_L + 4)}" y="${(Y_ADX + 12)}" fill="${TEXT_BRIGHT}" font-size="9" font-weight="600">ADX  </text>`,
-    `<text x="${(PAD_L + 36)}" y="${(Y_ADX + 12)}" fill="${GREEN}" font-size="9" font-weight="600">+DI  </text>`,
-    `<text x="${(PAD_L + 60)}" y="${(Y_ADX + 12)}" fill="${RED}" font-size="9" font-weight="600">-DI</text>`,
+    `<text x="${(PAD_L + 4)}" y="${(Y_SQ + 14)}" fill="${TEXT}" font-size="9.5" font-weight="600">BB/KC SQUEEZE</text>`,
+    `<text x="${(PAD_L + 4)}" y="${(Y_RSI + 14)}" fill="${PURPLE}" font-size="9.5" font-weight="600">RSI (14)</text>`,
+    `<text x="${(PAD_L + 4)}" y="${(Y_ADX + 14)}" fill="${TEXT_BRIGHT}" font-size="9.5" font-weight="600">ADX(13,8)</text>`,
+    `<text x="${(PAD_L + 78)}" y="${(Y_ADX + 14)}" fill="${GREEN}" font-size="9.5" font-weight="600">+DI</text>`,
+    `<text x="${(PAD_L + 106)}" y="${(Y_ADX + 14)}" fill="${RED}" font-size="9.5" font-weight="600">-DI</text>`,
   ].join('');
+
+  // Sub-panel Y labels (RSI levels already handled; ADX scale)
+  const adxYLabels = [0, 25, 50, 75].map(val => {
+    const y = scaleY(val, adxMin2, adxMax, Y_ADX, H_ADX);
+    return [
+      `<text x="${(PAD_L - 5).toFixed(1)}" y="${y.toFixed(1)}" fill="${TEXT}" font-size="8.5" text-anchor="end" dominant-baseline="middle">${val}</text>`,
+      `<text x="${(PAD_L + CHART_W + 5).toFixed(1)}" y="${y.toFixed(1)}" fill="${TEXT}" font-size="8.5" text-anchor="start" dominant-baseline="middle">${val}</text>`,
+    ].join('');
+  }).join('');
 
   // ─── LEGEND ────────────────────────────────────────────────────────
   const legend = [
@@ -287,7 +314,9 @@ export function renderChartSvg(data: OHLCV[], symbol: string, stockName: string)
   ${adx25Label}
   <!-- Panel labels -->
   ${panelLabels}
+  ${adxYLabels}
   <!-- X axis -->
+  ${xAxisLine}
   ${dateLabels}
 </svg>`;
 }
