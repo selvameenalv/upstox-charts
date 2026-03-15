@@ -5,3 +5,22 @@ html, body {
 }
 
 * { box-sizing: border-box; }
+
+:root {
+  --bg: #080c10;
+  --surface: #0d1117;
+  --surface2: #161b22;
+  --border: #21262d;
+  --border2: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --green: #26a641;
+  --green-bright: #3fb950;
+  --red: #f85149;
+  --blue: #58a6ff;
+  --orange: #f0883e;
+  --yellow: #d29922;
+  --accent: #58a6ff;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+  --font-display: 'Syne', sans-serif;
+}
